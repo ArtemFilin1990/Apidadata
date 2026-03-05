@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -52,6 +52,8 @@ class DadataClient:
     timeout_seconds: float
     rps_limit: int
     max_connections: int
+    _client: httpx.AsyncClient = field(init=False, repr=False)
+    _limiter: SlidingWindowRateLimiter = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         limits = httpx.Limits(
