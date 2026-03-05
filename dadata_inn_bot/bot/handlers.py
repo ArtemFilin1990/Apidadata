@@ -1,23 +1,35 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
 from aiogram.exceptions import TelegramBadRequest
 
+from .cache import SessionStore
 from .dadata import DadataAuthError, DadataError, DadataRateLimitError
+from .dadata import DadataClient
 from .formatters import render_section
 from .inn import extract_inn, validate_inn
 from .keyboards import build_sections_keyboard
-from .service import PartyLookupService
 
 logger = logging.getLogger(__name__)
 
 
-def build_router(service: PartyLookupService) -> Router:
+def build_router(store: SessionStore, dadata: DadataClient) -> Router:
     router = Router(name="party_lookup")
+
+    async def lookup(inn: str) -> tuple[dict[str, Any] | None, bool]:
+        cached = await store.get_party(inn)
+        if cached is not None:
+            return cached, True
+
+        payload = await dadata.find_party(inn)
+        if payload is not None:
+            await store.set_party(inn, payload)
+        return payload, False
 
     @router.message(CommandStart())
     async def command_start(message: Message) -> None:
@@ -38,7 +50,7 @@ def build_router(service: PartyLookupService) -> Router:
             return
 
         try:
-            payload, from_cache = await service.lookup(inn)
+            payload, from_cache = await lookup(inn)
         except DadataAuthError:
             await message.answer("DaData не пустила по ключу или тарифу. Проверьте DADATA_API_KEY и доступ к findById/party.")
             return
@@ -54,7 +66,7 @@ def build_router(service: PartyLookupService) -> Router:
             await message.answer("По этому ИНН ничего не найдено.")
             return
 
-        session_id = await service.create_session(inn)
+        session_id = await store.create_session(inn)
         prefix = "[кеш]\n" if from_cache else ""
         await message.answer(
             prefix + render_section(payload, "main"),
@@ -71,7 +83,7 @@ def build_router(service: PartyLookupService) -> Router:
             return
 
         _, session_id, section = parts
-        payload = await service.get_by_session(session_id)
+        payload = await store.get_party_by_session(session_id)
         if payload is None:
             await callback.answer("Сессия устарела. Пришлите ИНН ещё раз.", show_alert=True)
             return

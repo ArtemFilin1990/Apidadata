@@ -14,7 +14,6 @@ from .cache import SessionStore, create_cache
 from .config import get_settings
 from .dadata import DadataClient
 from .handlers import build_router
-from .service import PartyLookupService
 
 
 async def healthcheck(_: web.Request) -> web.Response:
@@ -43,10 +42,8 @@ def main() -> None:
         rps_limit=settings.dadata_rps_limit,
         max_connections=settings.max_connections,
     )
-    service = PartyLookupService(store=store, dadata=dadata_client)
-
     dp = Dispatcher()
-    dp.include_router(build_router(service))
+    dp.include_router(build_router(store, dadata_client))
 
     bot = Bot(
         token=settings.bot_token,
