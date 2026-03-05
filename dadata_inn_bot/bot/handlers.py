@@ -18,18 +18,23 @@ from .keyboards import build_sections_keyboard
 logger = logging.getLogger(__name__)
 
 
+async def _lookup_party(
+    store: SessionStore,
+    dadata: DadataClient,
+    inn: str,
+) -> tuple[dict[str, Any] | None, bool]:
+    cached = await store.get_party(inn)
+    if cached is not None:
+        return cached, True
+
+    payload = await dadata.find_party(inn)
+    if payload is not None:
+        await store.set_party(inn, payload)
+    return payload, False
+
+
 def build_router(store: SessionStore, dadata: DadataClient) -> Router:
     router = Router(name="party_lookup")
-
-    async def lookup(inn: str) -> tuple[dict[str, Any] | None, bool]:
-        cached = await store.get_party(inn)
-        if cached is not None:
-            return cached, True
-
-        payload = await dadata.find_party(inn)
-        if payload is not None:
-            await store.set_party(inn, payload)
-        return payload, False
 
     @router.message(CommandStart())
     async def command_start(message: Message) -> None:
@@ -50,7 +55,7 @@ def build_router(store: SessionStore, dadata: DadataClient) -> Router:
             return
 
         try:
-            payload, from_cache = await lookup(inn)
+            payload, from_cache = await _lookup_party(store, dadata, inn)
         except DadataAuthError:
             await message.answer("DaData не пустила по ключу или тарифу. Проверьте DADATA_API_KEY и доступ к findById/party.")
             return
