@@ -83,13 +83,37 @@ docker run --env-file .env -p 80:80 dadata-inn-bot
 
 В проекте уже есть `Dockerfile` и `amvera.yml`.
 
-Порядок:
+### Вариант 1: использовать текущий git-репозиторий
 
-1. Залить репозиторий в Amvera.
-2. Добавить секреты из `.env.example` во вкладке переменных окружения.
-3. Убедиться, что публичный URL проекта совпадает с `WEBHOOK_BASE_URL`.
-4. Запустить приложение.
-5. Проверить `https://<ваш-домен>/health`.
+```bash
+git status
+git add .
+git commit -m "Prepare deploy"
+git remote add amvera https://git.amvera.ru/<username>/<project-name>
+git push amvera master
+```
+
+### Вариант 2: использовать выделенный репозиторий Amvera
+
+```bash
+git clone https://git.amvera.ru/<username>/<project-name>
+cd <project-name>
+# Скопируйте сюда файлы проекта (Dockerfile, requirements.txt, amvera.yml, папку bot/)
+git add .
+git commit -m "Initial deploy"
+git remote add amvera https://git.amvera.ru/<username>/<project-name>
+git push amvera master
+```
+
+После push Amvera автоматически запускает сборку и деплой.
+
+Дальше:
+
+1. Добавить секреты из `.env.example` во вкладке переменных окружения.
+2. Убедиться, что публичный URL проекта совпадает с `WEBHOOK_BASE_URL`.
+3. Проверить `https://<ваш-домен>/health`.
+4. Если процесс слушает `localhost`, заменить host на `0.0.0.0` (в этом проекте уже используется `0.0.0.0`).
+5. При проблемах смотреть build/runtime-логи в Amvera (логи могут появляться с задержкой).
 
 ## Что стоит докрутить после запуска
 
