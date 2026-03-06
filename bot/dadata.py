@@ -29,9 +29,12 @@ class SlidingWindowRateLimiter:
         self._max_calls = max_calls
         self._period = period_seconds
         self._timestamps: deque[float] = deque()
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
 
     async def acquire(self) -> None:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+
         while True:
             async with self._lock:
                 now = time.monotonic()

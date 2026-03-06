@@ -19,10 +19,16 @@ class CacheBackend(Protocol):
 class MemoryCache:
     def __init__(self) -> None:
         self._items: dict[str, tuple[float, Any]] = {}
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def get_json(self, key: str) -> Any | None:
-        async with self._lock:
+        async with self.lock:
             entry = self._items.get(key)
             if entry is None:
                 return None
@@ -33,7 +39,7 @@ class MemoryCache:
             return value
 
     async def set_json(self, key: str, value: Any, ttl_seconds: int) -> None:
-        async with self._lock:
+        async with self.lock:
             self._items[key] = (time.monotonic() + ttl_seconds, value)
 
     async def close(self) -> None:
