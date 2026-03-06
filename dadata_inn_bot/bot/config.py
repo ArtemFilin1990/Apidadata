@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from urllib.parse import urlparse
 
 
 def _required(name: str) -> str:
@@ -47,6 +48,17 @@ def _bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _validate_webhook_base_url(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme.lower() != "https":
+        raise RuntimeError("WEBHOOK_BASE_URL must start with https://")
+    if not parsed.netloc:
+        raise RuntimeError("WEBHOOK_BASE_URL must contain host")
+    if parsed.query or parsed.params or parsed.fragment:
+        raise RuntimeError("WEBHOOK_BASE_URL must not contain query, params or fragment")
+    return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+
 @dataclass(slots=True)
 class Settings:
     bot_token: str
@@ -68,12 +80,15 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    webhook_base_url = _required("WEBHOOK_BASE_URL").rstrip("/")
+    webhook_base_url = _validate_webhook_base_url(_required("WEBHOOK_BASE_URL"))
     webhook_path = _optional("WEBHOOK_PATH", "/telegram/webhook") or "/telegram/webhook"
     if not webhook_path.startswith("/"):
         webhook_path = "/" + webhook_path
+    webhook_path = "/" + webhook_path.strip("/")
 
     webhook_secret = _required("TELEGRAM_WEBHOOK_SECRET")
+    if len(webhook_secret) < 16:
+        raise RuntimeError("TELEGRAM_WEBHOOK_SECRET must be at least 16 characters")
 
     return Settings(
         bot_token=_required("BOT_TOKEN"),
@@ -82,7 +97,7 @@ def get_settings() -> Settings:
         webhook_path=webhook_path,
         webhook_secret=webhook_secret,
         host=_optional("HOST", "0.0.0.0") or "0.0.0.0",
-        port=_int("PORT", 8080),
+        port=_int("PORT", 80),
         cache_ttl_seconds=_int("CACHE_TTL_SECONDS", 6 * 60 * 60),
         session_ttl_seconds=_int("SESSION_TTL_SECONDS", 2 * 60 * 60),
         dadata_rps_limit=max(1, _int("DADATA_RPS_LIMIT", 8)),
