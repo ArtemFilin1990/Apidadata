@@ -42,7 +42,7 @@
 Обязательные:
 
 - `BOT_TOKEN`
-- `TELEGRAM_WEBHOOK_SECRET`
+- `TELEGRAM_WEBHOOK_SECRET (минимум 16 символов)`
 - `WEBHOOK_BASE_URL`
 - `DADATA_API_KEY`
 
