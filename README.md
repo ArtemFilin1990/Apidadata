@@ -5,7 +5,7 @@
 - один запрос `findById/party` на ИНН;
 - кеш ответа по ИНН;
 - inline-разделы без повторных вызовов API;
-- webhook с `secret_token`;
+- webhook с `secret_token` через python-telegram-bot;
 - деплой через Docker на Amvera.
 
 ## Что умеет
@@ -111,7 +111,7 @@ git push amvera master
 
 1. Добавить секреты из `.env.example` во вкладке переменных окружения.
 2. Убедиться, что публичный URL проекта совпадает с `WEBHOOK_BASE_URL`.
-3. Проверить `https://<ваш-домен>/health`.
+3. Проверить в логах успешную установку webhook и отправить /start боту для smoke-теста.
 4. Если процесс слушает `localhost`, заменить host на `0.0.0.0` (в этом проекте уже используется `0.0.0.0`).
 5. При проблемах смотреть build/runtime-логи в Amvera (логи могут появляться с задержкой).
 
@@ -136,6 +136,6 @@ bot/
   handlers.py    # Telegram handlers
   inn.py         # извлечение и проверка ИНН
   keyboards.py   # inline-кнопки
-  main.py        # aiohttp + aiogram webhook app
+  main.py        # python-telegram-bot webhook app
 ```
 
