@@ -38,7 +38,8 @@ def main() -> None:
     )
     service = PartyLookupService(store=store, dadata=dadata_client)
 
-    async def post_shutdown(_: object) -> None:
+    async def post_shutdown(bot: object) -> None:
+        _ = bot
         await dadata_client.close()
         await cache_backend.close()
 
