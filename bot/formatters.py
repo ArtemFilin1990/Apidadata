@@ -359,7 +359,10 @@ def _date_ms(value: Any) -> str:
         value_int = int(value)
     except (TypeError, ValueError):
         return escape(str(value))
-    dt = datetime.fromtimestamp(value_int / 1000, tz=timezone.utc)
+    try:
+        dt = datetime.fromtimestamp(value_int / 1000, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return escape(str(value))
     return dt.strftime("%d.%m.%Y")
 
 
