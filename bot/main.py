@@ -3,22 +3,15 @@ from __future__ import annotations
 import logging
 import sys
 
-from aiohttp import web
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from dotenv import load_dotenv
+from telegram.constants import ParseMode
+from telegram.ext import ApplicationBuilder, Defaults
 
 from .cache import SessionStore, create_cache
 from .config import get_settings
 from .dadata import DadataClient
-from .handlers import build_router
+from .handlers import register_handlers
 from .service import PartyLookupService
-
-
-async def healthcheck(_: web.Request) -> web.Response:
-    return web.json_response({"ok": True})
 
 
 def main() -> None:
@@ -45,46 +38,28 @@ def main() -> None:
     )
     service = PartyLookupService(store=store, dadata=dadata_client)
 
-    dp = Dispatcher()
-    dp.include_router(build_router(service))
-
-    bot = Bot(
-        token=settings.bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-
-    async def on_startup(bot: Bot) -> None:
-        await bot.set_webhook(
-            url=f"{settings.webhook_base_url}{settings.webhook_path}",
-            secret_token=settings.webhook_secret,
-            allowed_updates=dp.resolve_used_update_types(),
-            drop_pending_updates=settings.drop_pending_updates,
-        )
-        logging.getLogger(__name__).info(
-            "Webhook configured at %s%s",
-            settings.webhook_base_url,
-            settings.webhook_path,
-        )
-
-    async def on_shutdown(_: Bot) -> None:
+    async def post_shutdown(_: object) -> None:
         await dadata_client.close()
         await cache_backend.close()
 
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
-
-    app = web.Application()
-    app.router.add_get("/health", healthcheck)
-
-    request_handler = SimpleRequestHandler(
-        dispatcher=dp,
-        bot=bot,
-        secret_token=settings.webhook_secret,
+    application = (
+        ApplicationBuilder()
+        .token(settings.bot_token)
+        .defaults(Defaults(parse_mode=ParseMode.HTML))
+        .post_shutdown(post_shutdown)
+        .build()
     )
-    request_handler.register(app, path=settings.webhook_path)
-    setup_application(app, dp, bot=bot)
+    register_handlers(application, service)
 
-    web.run_app(app, host=settings.host, port=settings.port)
+    application.run_webhook(
+        listen=settings.host,
+        port=settings.port,
+        url_path=settings.webhook_path.lstrip("/"),
+        webhook_url=f"{settings.webhook_base_url}{settings.webhook_path}",
+        drop_pending_updates=settings.drop_pending_updates,
+        secret_token=settings.webhook_secret,
+        allowed_updates=["message", "callback_query"],
+    )
 
 
 if __name__ == "__main__":
