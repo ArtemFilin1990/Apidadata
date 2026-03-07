@@ -124,6 +124,7 @@ class DadataClient:
             first = suggestions[0]
             if not isinstance(first, dict):
                 return None
+            first.setdefault("_source", "dadata")
             return first
 
         if last_error is not None:

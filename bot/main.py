@@ -8,6 +8,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, Defaults
 
 from .cache import SessionStore, create_cache
+from .checko import CheckoClient
 from .config import get_settings
 from .dadata import DadataClient
 from .handlers import register_handlers
@@ -24,7 +25,7 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    cache_backend = create_cache(settings.redis_url)
+    cache_backend = create_cache(settings.storage_backend, settings.redis_url, settings.sqlite_path)
     store = SessionStore(
         backend=cache_backend,
         payload_ttl=settings.cache_ttl_seconds,
@@ -36,11 +37,23 @@ def main() -> None:
         rps_limit=settings.dadata_rps_limit,
         max_connections=settings.max_connections,
     )
-    service = PartyLookupService(store=store, dadata=dadata_client)
+    checko_client = (
+        CheckoClient(
+            api_key=settings.checko_api_key,
+            base_url=settings.checko_base_url,
+            timeout_seconds=settings.request_timeout_seconds,
+        )
+        if settings.checko_api_key
+        else None
+    )
+
+    service = PartyLookupService(store=store, dadata=dadata_client, checko=checko_client)
 
     async def post_shutdown(bot: object) -> None:
         _ = bot
         await dadata_client.close()
+        if checko_client is not None:
+            await checko_client.close()
         await cache_backend.close()
 
     application = (
@@ -51,6 +64,13 @@ def main() -> None:
         .build()
     )
     register_handlers(application, service)
+
+    if settings.run_mode == "polling":
+        application.run_polling(
+            drop_pending_updates=settings.drop_pending_updates,
+            allowed_updates=["message", "callback_query"],
+        )
+        return
 
     application.run_webhook(
         listen=settings.host,

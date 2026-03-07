@@ -60,11 +60,13 @@ async def handle_text(update: Update, _: ContextTypes.DEFAULT_TYPE, service: Par
         return
 
     if payload is None:
-        await update.message.reply_text("По этому ИНН ничего не найдено.")
+        await update.message.reply_text("По этому ИНН ничего не найдено ни в DaData, ни в Checko.")
         return
 
     session_id = await service.create_session(inn)
-    prefix = "[кеш]\n" if from_cache else ""
+    source = str(payload.get("_source") or "dadata")
+    source_label = "[checko fallback]\n" if source == "checko" else ""
+    prefix = ("[кеш]\n" if from_cache else "") + source_label
     await update.message.reply_text(
         prefix + render_section(payload, "main"),
         reply_markup=build_sections_keyboard(session_id),
