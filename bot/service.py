@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .cache import SessionStore
+from .checko import CheckoClient
 from .dadata import DadataClient
 
 
@@ -11,6 +12,7 @@ from .dadata import DadataClient
 class PartyLookupService:
     store: SessionStore
     dadata: DadataClient
+    checko: CheckoClient | None = None
 
     async def lookup(self, inn: str) -> tuple[dict[str, Any] | None, bool]:
         cached = await self.store.get_party(inn)
@@ -18,6 +20,9 @@ class PartyLookupService:
             return cached, True
 
         payload = await self.dadata.find_party(inn)
+        if payload is None and self.checko is not None:
+            payload = await self.checko.find_party(inn)
+
         if payload is not None:
             await self.store.set_party(inn, payload)
         return payload, False

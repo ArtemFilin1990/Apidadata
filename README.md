@@ -1,150 +1,82 @@
-# Telegram-бот проверки контрагента по ИНН на DaData
+# Dadata + Checko Telegram Bot (Render/Replit ready)
 
-Это каркас под прод, без внешних источников кроме DaData:
+Production-oriented Telegram bot for counterparty checks by INN.
 
-- один запрос `findById/party` на ИНН;
-- кеш ответа по ИНН;
-- inline-разделы без повторных вызовов API;
-- webhook с `secret_token` через python-telegram-bot;
-- деплой через Docker на Amvera.
+## What works now
 
-## Что умеет
+- DaData `findById/party` lookup by INN (single API call per uncached INN).
+- Optional fallback to Checko (`/company`, `/entrepreneur`, `/person`) when DaData returns no data.
+- Reply + inline menu sections: `Реквизиты`, `Финансы`, `Налоги`, `Проверки`, `Арбитраж`, `Риски`, `Лица`, `Контакты`, `Лицензии`.
+- Runtime modes:
+  - `webhook` (Render/Amvera)
+  - `polling` (Replit/local)
+- Storage backends:
+  - `memory`
+  - `redis`
+  - `sqlite` (default; file `.data/bot-storage.db`)
 
-После ввода ИНН бот:
+## DaData Max / Clean API notes
 
-1. валидирует формат и контрольные цифры;
-2. проверяет кеш;
-3. при промахе делает `POST /suggestions/api/4_1/rs/findById/party`;
-4. сохраняет результат в кеш;
-5. показывает карточку и inline-кнопки:
-   - Карточка
-   - Оборот
-   - Долги
-   - Штрафы
-   - Суды
-   - Риски
-   - Лица
-   - Контакты
-   - Лицензии
+- This bot uses **DaData Suggestions API** (`findById/party`) for subscription traffic.
+- **Clean API methods are pay-per-request and not included in subscription tariff plans**.
+- If you enable Clean API in future revisions, keep it strictly server-side (`X-Secret`), with explicit feature flags and budget monitoring.
 
-## Важная оговорка по кнопке «Суды»
-
-Раздел `Суды` в этом проекте показывает только те судебные решения, которые DaData вернула в признаках недостоверности по адресу, руководителям или учредителям. Это не полный реестр арбитражных дел.
-
-## До запуска
-
-1. Перевыпустите токен бота в `@BotFather`. Если токен уже светился в URL, считать его действующим нельзя.
-2. Заполните `.env` на основе `.env.example`.
-3. Убедитесь, что на тарифе DaData доступен `findById/party` и нужные расширенные поля.
-
-## Переменные окружения
-
-Обязательные:
-
-- `BOT_TOKEN`
-- `TELEGRAM_WEBHOOK_SECRET (минимум 16 символов)`
-- `WEBHOOK_BASE_URL`
-- `DADATA_API_KEY`
-
-Опциональные:
-
-- `WEBHOOK_PATH=/telegram/webhook`
-- `CACHE_TTL_SECONDS=21600`
-- `SESSION_TTL_SECONDS=7200`
-- `DADATA_RPS_LIMIT=8`
-- `DADATA_MAX_CONNECTIONS=10`
-- `REQUEST_TIMEOUT_SECONDS=10`
-- `REDIS_URL=`
-- `PORT=80`
-- `DROP_PENDING_UPDATES=false`
-
-Если `REDIS_URL` не задан, бот использует память процесса. Для прода лучше Redis, иначе после рестарта кеш и активные сессии пропадут.
-
-## Локальный запуск
+## Quick start (local/Replit)
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+```
+
+For Replit/local polling mode set in `.env`:
+
+```env
+RUN_MODE=polling
+STORAGE_BACKEND=sqlite
+```
+
+Then start:
+
+```bash
 python -m bot.main
 ```
 
-Для локальной проверки webhook нужен внешний HTTPS URL, например через туннель или обратный прокси.
+## Render webhook deploy
 
-## Docker
+1. Set `RUN_MODE=webhook`.
+2. Provide:
+   - `WEBHOOK_BASE_URL=https://<your-service>.onrender.com`
+   - `TELEGRAM_WEBHOOK_SECRET` (>=16 chars)
+3. Ensure service listens on `0.0.0.0:$PORT`.
+4. Deploy via existing `Dockerfile`.
 
-```bash
-docker build -t dadata-inn-bot .
-docker run --env-file .env -p 80:80 dadata-inn-bot
-```
+## Required environment variables
 
-## Деплой на Amvera
+Always required:
 
-В проекте уже есть `Dockerfile` и `amvera.yml`.
+- `BOT_TOKEN`
+- `DADATA_API_KEY`
+- `RUN_MODE` (`webhook|polling`)
 
-### Коротко: что нужно для деплоя
+Webhook-only required:
 
-Для рабочего деплоя действительно достаточно трёх шагов:
+- `WEBHOOK_BASE_URL`
+- `TELEGRAM_WEBHOOK_SECRET`
 
-1. **Обновить зависимости** (при необходимости) и зафиксировать `requirements.txt`.
-2. **Задать переменные окружения** из `.env.example` в Amvera Secrets/Environment Variables.
-3. **Поднять сервис** (push в Amvera-репозиторий) и дождаться успешного старта контейнера.
+Optional:
 
-Минимальная проверка после старта: в логах нет ошибок валидации ENV, webhook установлен, бот отвечает на `/start`.
+- `STORAGE_BACKEND=memory|redis|sqlite`
+- `REDIS_URL` (required when `STORAGE_BACKEND=redis`)
+- `SQLITE_PATH` (default `.data/bot-storage.db`)
+- `CHECKO_API_KEY`
+- `CHECKO_BASE_URL`
+- `CACHE_TTL_SECONDS`, `SESSION_TTL_SECONDS`, `DADATA_RPS_LIMIT`, `DADATA_MAX_CONNECTIONS`, `REQUEST_TIMEOUT_SECONDS`
 
-### Вариант 1: использовать текущий git-репозиторий
+## Safety and caveats
 
-```bash
-git status
-git add .
-git commit -m "Prepare deploy"
-git remote add amvera https://git.amvera.ru/<username>/<project-name>
-git push amvera master
-```
-
-### Вариант 2: использовать выделенный репозиторий Amvera
-
-```bash
-git clone https://git.amvera.ru/<username>/<project-name>
-cd <project-name>
-# Скопируйте сюда файлы проекта (Dockerfile, requirements.txt, amvera.yml, папку bot/)
-git add .
-git commit -m "Initial deploy"
-git remote add amvera https://git.amvera.ru/<username>/<project-name>
-git push amvera master
-```
-
-После push Amvera автоматически запускает сборку и деплой.
-
-Дальше:
-
-1. Добавить секреты из `.env.example` во вкладке переменных окружения.
-2. Убедиться, что публичный URL проекта совпадает с `WEBHOOK_BASE_URL`.
-3. Проверить в логах успешную установку webhook и отправить /start боту для smoke-теста.
-4. Если процесс слушает `localhost`, заменить host на `0.0.0.0` (в этом проекте уже используется `0.0.0.0`).
-5. При проблемах смотреть build/runtime-логи в Amvera (логи могут появляться с задержкой).
-
-Если деплой на Amvera падает на старте из-за конфигурации (`WEBHOOK_BASE_URL`, секрет вебхука, структура архива), см. подробный чеклист: [DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md).
-
-## Что стоит докрутить после запуска
-
-- Redis как обязательный backend для кеша.
-- метрики и алерты по 429/5xx;
-- отдельный мониторинг остатка лимита DaData через `api/v2/stat/daily`;
-- журнал запросов без хранения персональных данных дольше необходимого;
-- fallback-команду администратора для чтения `getWebhookInfo` после ротации токена.
-
-## Структура проекта
-
-```text
-bot/
-  config.py      # env и настройки
-  cache.py       # memory/redis кеш и сессии
-  dadata.py      # клиент DaData + rate limit + retries
-  formatters.py  # сборка карточек и секций
-  handlers.py    # Telegram handlers
-  inn.py         # извлечение и проверка ИНН
-  keyboards.py   # inline-кнопки
-  main.py        # python-telegram-bot webhook app
-```
+- Never commit tokens/keys.
+- If both DaData and Checko return empty: user gets a clear “not found” response.
+- For organization checks, INN validation is strict (control digits).
+- Fallback data from Checko is normalized to bot section format; some extended section fields may stay empty when source data does not provide them.
